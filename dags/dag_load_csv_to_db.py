@@ -7,7 +7,7 @@ from airflow.models import Variable
 from airflow.hooks.base import BaseHook
 from airflow.operators.python import PythonOperator
 from sqlalchemy import create_engine, text
-
+from airflow.operators.empty import EmptyOperator
 
 def get_list_process_data():
     input_path = Variable.get('input_path', default_var='/opt/airflow/dags/input')
@@ -104,12 +104,13 @@ def load_file(**context):
 
 
 with DAG(
-    "etl_pipeline",
+    "dag_stagging",
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Jakarta"),
     schedule_interval=None,
     catchup=False
 ) as dag:
-
+    start = EmptyOperator(task_id="start")
+    end = EmptyOperator(task_id="end")
     extract_files = PythonOperator(
         task_id="extract_files",
         python_callable=extract_meta,
@@ -127,4 +128,4 @@ with DAG(
         provide_context=True
     )
 
-    extract_files >> clear_table >> load_files
+    start>>extract_files >> clear_table >> load_files>>end
