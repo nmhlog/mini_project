@@ -58,7 +58,7 @@ def truncate_table():
     engine = create_engine(conn_str)
 
     truncate_sql = ";\n".join(
-        [f"TRUNCATE TABLE {tbl} RESTART IDENTITY CASCADE" for tbl in process_table]
+        [f"TRUNCATE TABLE stg.{tbl} RESTART IDENTITY CASCADE" for tbl in process_table]
     ) + ";"
 
     with engine.begin() as connection:  # auto commit/rollback
@@ -83,19 +83,20 @@ def load_file(**context):
 
         print("Loading file:", f["file_path"])
         df = pd.read_csv(f["file_path"], delimiter=mapping['delimiter'])
-
-        df['BatchId'] = f['batch_id']
+        df.columns = df.columns.str.lower()
+        df['batchid'] = pd.to_datetime(f['batch_id'])
         if data_header == 'sales':
             df['salesdate'] = df['salesdate'].astype(str).apply(
                 lambda x: pendulum.from_format(x, "YYYYMMDD")
             )
             df['discount'] = df['discount'].fillna(0)
         elif data_header == 'products':
-            df['Price'] = df['Price'].str.replace(',', '').astype(float)
-
+            df['price'] = df['price'].str.replace(',', '').astype(float)
+        print(f"Inserting CSV ==> {mapping['table']}")
         df.to_sql(
             mapping['table'],
             engine,
+            schema="stg",  
             if_exists='append',
             index=False,
             chunksize=1000,
@@ -128,4 +129,6 @@ with DAG(
         provide_context=True
     )
 
+    
+    
     start>>extract_files >> clear_table >> load_files>>end
