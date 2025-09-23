@@ -11,7 +11,7 @@ from airflow.operators.empty import EmptyOperator
 
 
 def get_engine():
-    conn = BaseHook.get_connection("postgres_dna")
+    conn = BaseHook.get_connection("neon_db")
     conn_str = f"postgresql+psycopg2://{conn.login}:{conn.password}@{conn.host}:{conn.port}/{conn.schema}"
     return create_engine(conn_str)
 
@@ -77,9 +77,7 @@ def truncate_table():
         print("No tables to truncate")
         return
 
-    conn = BaseHook.get_connection("postgres_dna")
-    conn_str = f"postgresql+psycopg2://{conn.login}:{conn.password}@{conn.host}:{conn.port}/{conn.schema}"
-    engine = create_engine(conn_str)
+    engine = get_engine()
 
     truncate_sql = ";\n".join(
         [f"TRUNCATE TABLE stg.{tbl} RESTART IDENTITY CASCADE" for tbl in process_table]
@@ -87,7 +85,7 @@ def truncate_table():
 
     with engine.begin() as connection:  # auto commit/rollback
         connection.execute(text(truncate_sql))
-
+        
     print(f"Truncated tables: {', '.join(process_table)}")
 
 
@@ -95,9 +93,7 @@ def load_file(**context):
     ti = context['ti']
     files = ti.xcom_pull(task_ids="extract_meta_data", key="files")
     csv_mapping = Variable.get('csv_mapping', deserialize_json=True)
-    conn = BaseHook.get_connection("postgres_dna")
-    conn_str = f"postgresql+psycopg2://{conn.login}:{conn.password}@{conn.host}:{conn.port}/{conn.schema}"
-    engine = create_engine(conn_str)
+    engine = get_engine()
 
     for f in files:
         data_header = f['data_header']
@@ -117,15 +113,16 @@ def load_file(**context):
         elif data_header == 'products':
             df['price'] = df['price'].str.replace(',', '').astype(float)
         print(f"Inserting CSV ==> {mapping['table']}")
-        df.to_sql(
-            mapping['table'],
-            engine,
-            schema="stg",  
-            if_exists='append',
-            index=False,
-            chunksize=1000,
-            method="multi"
-        )
+        with engine.begin() as connection:
+            df.to_sql(
+                mapping['table'],
+                connection,
+                schema="stg",  
+                if_exists='append',
+                index=False,
+                chunksize=1000,
+                method="multi"
+            )
 
 # def get_batches(**context):
 #     engine = get_engine()

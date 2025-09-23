@@ -338,12 +338,13 @@ BEGIN
 END;
 $$;
 
+-- drop procedure dm.sp_load_fact_sales_by_batch
 
-
-CREATE OR REPLACE PROCEDURE dm.load_fact_sales(p_batch_date DATE)
+CREATE OR REPLACE PROCEDURE dm.sp_load_fact_sales_by_batch(p_batchid DATE)
 LANGUAGE plpgsql
 AS $$
 BEGIN
+    -- Insert new rows for the given batchid
     INSERT INTO dm.fact_sales (
         sk_date,
         sk_customer,
@@ -356,7 +357,7 @@ BEGIN
         total_price,
         insert_date
     )
-    SELECT 
+    SELECT DISTINCT ON (s.salesid)
         d.sk_date,
         c.sk_customer,
         e.sk_employee,
@@ -366,19 +367,20 @@ BEGIN
         s.quantity,
         s.discount,
         s.totalprice,
-        p_batch_date
+        p_batchid
     FROM stg.sales s
-    LEFT JOIN dm.dim_time d 
-           ON s.salesdate = d.date
-    LEFT JOIN dm.dim_customer c 
-           ON s.customerid = c.customer_id
-          AND p_batch_date BETWEEN c.start_date AND c.end_date   -- ambil versi yang aktif saat batch_date
-    LEFT JOIN dm.dim_employee e 
-           ON s.salespersonid = e.employee_id
-          AND p_batch_date BETWEEN e.start_date AND e.end_date
-    LEFT JOIN dm.dim_product p 
-           ON s.productid = p.product_id
-          AND p_batch_date BETWEEN p.start_date AND p.end_date
-    WHERE s.batchid = p_batch_date;
+    LEFT JOIN dm.dim_time d ON s.salesdate = d.date
+    LEFT JOIN dm.dim_customer c ON s.customerid = c.customer_id
+    LEFT JOIN dm.dim_employee e ON s.salespersonid = e.employee_id
+    LEFT JOIN dm.dim_product p ON s.productid = p.product_id
+    WHERE s.batchid = p_batchid   -- <- corrected column name
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dm.fact_sales f
+          WHERE f.sales_id = s.salesid
+      )
+    ORDER BY s.salesid, s.transactionnumber;
+
+    RAISE NOTICE 'Fact table loaded for batchid %', p_batchid;
 END;
 $$;
