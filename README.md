@@ -51,7 +51,9 @@ flowchart LR
     E --> F[load_dim_product]
     E --> G[load_dim_employee]
     E --> H[load_dim_customer]
-    F,G,H --> I[load_fact_sales]
+    F --> I[load_fact_sales]
+    G --> I
+    H --> I
     I --> J[End]
 ```
 ### Ringkasan Alur:
