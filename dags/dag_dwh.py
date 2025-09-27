@@ -11,7 +11,7 @@ from airflow.operators.empty import EmptyOperator
 
 
 def get_engine():
-    conn = BaseHook.get_connection("neon_db")
+    conn = BaseHook.get_connection("postgres_dwh")
     conn_str = f"postgresql+psycopg2://{conn.login}:{conn.password}@{conn.host}:{conn.port}/{conn.schema}"
     return create_engine(conn_str)
 
@@ -24,7 +24,16 @@ def get_list_process_data(ti):
         last_date = pendulum.datetime(1900, 1, 1)
 
     input_path = Variable.get('input_path', default_var='/opt/airflow/dags/input')
-    csv_mapping = Variable.get('csv_mapping', deserialize_json=True)
+    csv_mapping = Variable.get('csv_mapping',default_var="""
+{
+    "categories": {"file": "categories", "table": "categories", "delimiter": "|"},
+    "cities": {"file": "cities", "table": "cities", "delimiter": ";"},
+    "countries": {"file": "countries", "table": "countries", "delimiter": ";"},
+    "customers": {"file": "customers", "table": "customers", "delimiter": ";"},
+    "employes": {"file": "employes", "table": "employee", "delimiter": ";"},
+    "products": {"file": "products", "table": "products", "delimiter": ";"},
+    "sales": {"file": "sales", "table": "sales", "delimiter": ";"}
+}""", deserialize_json=True)
 
     # 2. List folders
     folders = [
@@ -184,7 +193,7 @@ def get_batch_id(**kwargs):
         print(f"Run date is {run_date} or not provided")
 
 with DAG(
-    "dag_stagging",
+    "dag_load_dwh_naufal",
     start_date=pendulum.datetime(2025, 1, 1, tz="Asia/Jakarta"),
     schedule_interval=None,
     catchup=False

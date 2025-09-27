@@ -339,10 +339,11 @@ END;
 $$;
 
 -- drop procedure dm.sp_load_fact_sales_by_batch
+-- DROP PROCEDURE dm.sp_load_fact_sales_by_batch(date);
 
-CREATE OR REPLACE PROCEDURE dm.sp_load_fact_sales_by_batch(p_batchid DATE)
-LANGUAGE plpgsql
-AS $$
+CREATE OR REPLACE PROCEDURE dm.sp_load_fact_sales_by_batch(IN p_batchid date)
+ LANGUAGE plpgsql
+AS $procedure$
 BEGIN
     -- Insert new rows for the given batchid
     INSERT INTO dm.fact_sales (
@@ -357,7 +358,7 @@ BEGIN
         total_price,
         insert_date
     )
-    SELECT DISTINCT ON (s.salesid)
+     SELECT DISTINCT ON (s.salesid)
         d.sk_date,
         c.sk_customer,
         e.sk_employee,
@@ -366,21 +367,41 @@ BEGIN
         s.transactionnumber,
         s.quantity,
         s.discount,
-        s.totalprice,
+quantity*(p.product_price-(p.product_price *discount)) total_price,
         p_batchid
     FROM stg.sales s
     LEFT JOIN dm.dim_time d ON s.salesdate = d.date
-    LEFT JOIN dm.dim_customer c ON s.customerid = c.customer_id
-    LEFT JOIN dm.dim_employee e ON s.salespersonid = e.employee_id
-    LEFT JOIN dm.dim_product p ON s.productid = p.product_id
-    WHERE s.batchid = p_batchid   -- <- corrected column name
+    LEFT JOIN dm.dim_customer c ON s.customerid = c.customer_id and c.is_current = true
+    LEFT JOIN dm.dim_employee e ON s.salespersonid = e.employee_id and e.is_current = true
+    LEFT JOIN dm.dim_product p ON s.productid = p.product_id 
+    WHERE s.batchid = p_batchid 
       AND NOT EXISTS (
           SELECT 1
           FROM dm.fact_sales f
           WHERE f.sales_id = s.salesid
       )
-    ORDER BY s.salesid, s.transactionnumber;
 
     RAISE NOTICE 'Fact table loaded for batchid %', p_batchid;
 END;
-$$;
+$procedure$
+;
+
+-- fact_sales → dim_time
+ALTER TABLE dm.fact_sales
+ADD CONSTRAINT fk_fact_sales_time
+FOREIGN KEY (sk_date) REFERENCES dm.dim_time(sk_date);
+
+-- fact_sales → dim_customer
+ALTER TABLE dm.fact_sales
+ADD CONSTRAINT fk_fact_sales_customer
+FOREIGN KEY (sk_customer) REFERENCES dm.dim_customer(sk_customer);
+
+-- fact_sales → dim_employee
+ALTER TABLE dm.fact_sales
+ADD CONSTRAINT fk_fact_sales_employee
+FOREIGN KEY (sk_employee) REFERENCES dm.dim_employee(sk_employee);
+
+-- fact_sales → dim_product
+ALTER TABLE dm.fact_sales
+ADD CONSTRAINT fk_fact_sales_product
+FOREIGN KEY (sk_product) REFERENCES dm.dim_product(sk_product);
